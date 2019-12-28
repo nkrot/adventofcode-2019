@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # # #
-# TODO: reuse day 11 PaintingRobot or 13 ArcadeGame?
+# TODO: reuse day 11 PaintingRobot or 13 arcade.Game?
 #
 
 import os
@@ -35,6 +35,8 @@ class RemoteControl(object):
         if program is not None:
             self.program = program
         self.verbose = False
+        self.board = None
+        self.goal_found = False
 
     @property
     def movement_commands(self):
@@ -49,7 +51,7 @@ class RemoteControl(object):
         This is just an alias that allows to think in domain terms
         """
         return self.inputs
-    
+
     @property
     def program(self):
         return self._program
@@ -58,51 +60,81 @@ class RemoteControl(object):
     def program(self, program):
         if isinstance(program, Tape):
             self._program = program
-            # computer is the repair droid
+            # computer is the Repair Droid
             self.computer = Interpreter(self._program, self.outputs)
             self.computer.set_uplink_to(self)
         else:
             raise ValueError(f"Can not set program from object of type {type(program)}")
 
     def execute(self):
-        self._vprint("RemoteConrol running")
+        self._vprint("RemoteControl running")
 
-        while not self.computer.finished:
+        while not self.finished:
             # repair droid accepts a movement instruction (0-4) and outputs status code (0-3)
-            
+
             self.generate_movement_instruction()
             self.computer.execute()
             self.interpret_status_code()
+            self._vprint(f"--- Board state ---\n{self.board.visualize()}\n------")
+
+    @property
+    def finished(self):
+        return self.computer.finished or self.goal_found
 
     def generate_movement_instruction(self):
         """
         Decide where to move and put corresponding code into <movement_commands>.
         """
 
-        cmd = random.choice(self.MOVEMENTS) # TODO: do something smarter
-        self.movement_commands.append(cmd)
-        
-        self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
+        # prefer an UNKNOWN cell over any other
+        # if there are no unknown cells remaining, choose an OPEN path
+        # when choosing an OPEN path, disfavour the one from where we have come
+        # TODO: mark somehow a path that leads to a dead end
+        moves = [(self.board[self.attempted_position(mc)], mc) for mc in self.MOVEMENTS]
+        for g in [Board.UNKNOWN, Board.OPEN]:
+            _moves = [m for m in moves if m[0] == g]
+            if len(_moves) > 0:
+                self.movement_command = random.choice(_moves)[1]
+                break
+
+            self.movement_commands.append(self.movement_command)
+
+            # self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
 
     def interpret_status_code(self):
         """
         Interpret the status code from the repair droid
         """
-        self._vprint(f"State of status codes (droid -> remote control): {self.droid_status_codes}")
+        # self._vprint(f"State of status codes (droid -> remote control): {self.droid_status_codes}")
         code = self.droid_status_codes.pop(0)
 
-        pos = (0,0) # TODO: position where we attempted to move
+        pos = self.attempted_position()
         if code == self.WALL:
-            self.board.mark_as(pos, board.WALL)
+            self.board.mark_as(pos, Board.WALL)
             # droid did not move
+
         elif code == self.EMPTY:
-            self.board.mark_as(pos, board.OPEN)
-            self.board.mark_as(pos, board.PLAYER)
+            self.board.mark_as(pos, Board.OPEN)
+            self.board.move_player_to(pos)
+
         elif code == self.GOAL:
-            self.board.mark_as(pos, board.GOAL)
-            # TODO: stop the game
+            self.board.mark_as(pos, Board.GOAL)
+            self.goal_found = True
         else:
             raise ValueError(f"Illegal code received from Repair Droid: {code}")
+
+    def attempted_position(self, mc=None):
+        """
+        Position to which the Repair Droid attempted to move
+        """
+        mc = mc or self.movement_command
+
+        if   mc == self.NORTH: return self.board.north_of()
+        elif mc == self.SOUTH: return self.board.south_of()
+        elif mc == self.WEST:  return self.board.west_of()
+        elif mc == self.EAST:  return self.board.east_of()
+        else:
+            raise ValueError("Oh shit")
 
     def _vprint(self, msg):
         if self.verbose:
@@ -124,22 +156,31 @@ class Board(object):
         PLAYER:  'D'
     }
 
-    def __init__(self, shape):
+    def __init__(self, shape, start_pos=None):
         self.shape = shape
         self.matrix = np.zeros(shape, dtype=np.int8)
-        self.player = None # position of the player as tuple (x,y)
+        self.player = start_pos # position of the player as tuple (x,y)
+        self.goal = None
+
+    def __getitem__(self, pos):
+        return self.matrix[pos]
+
+    def move_player_to(self, pos):
+        self.player = pos
 
     def mark_as(self, pos, code):
         """
         Mark given position <pos> as one of UNKNOWN|OPEN|WALL|GOAL|PLAYER
         """
         if code == self.PLAYER:
-            self.player = pos
+            self.move_player_to(pos)
         else:
             self.matrix[pos] = code
-        
+            if code == self.GOAL:
+                self.goal = pos
+
     def visualize(self):
-        """ 
+        """
         Generate a string representing the board in human-readable format.
         """
         lines = []
@@ -156,7 +197,30 @@ class Board(object):
             matrix = self.matrix.copy()
             matrix[self.player] = self.PLAYER
         return matrix
-    
+
+    def north_of(self, pos=None):
+        return self._xy(pos or self.player, [-1, 0])
+
+    def south_of(self, pos=None):
+        return self._xy(pos or self.player, [+1, 0])
+
+    def west_of(self, pos=None):
+        return self._xy(pos or self.player, [0, -1])
+
+    def east_of(self, pos=None):
+        return self._xy(pos or self.player, [0, +1])
+
+    def _xy(self, pos, update):
+        """
+        Apply given <update> vector to given position vector <pos> and return
+        obtained position, as tuple (x,y)
+        """
+        x = pos[0]+update[0]
+        y = pos[1]+update[1]
+        assert 0 <= x < self.shape[0], f"Coordinate x out of bound: {x}"
+        assert 0 <= y < self.shape[1], f"Coordinate y out of bound: {y}"
+        return (x,y)
+
 ################################################################################
 
 def run_tests_15_1():
@@ -167,38 +231,51 @@ def run_tests_15_1():
     board.mark_as((0,0), board.WALL)
     board.mark_as((0,1), board.WALL)
     board.mark_as((0,2), board.WALL)
-    
+
     board.mark_as((1,1), board.OPEN)
     board.mark_as((1,2), board.OPEN)
     board.mark_as((2,2), board.OPEN)
 
     board.mark_as((2,3), board.GOAL)
     board.mark_as((2,4), board.PLAYER)
-        
+
     print(board.visualize())
 
 
 def run_day_15_1():
+    """
+    What is the fewest number of movement commands required to move the repair
+    droid from its starting position to the location of the oxygen system?
+    """
+
+    # SOLUTION
+    #Start -> Goal: (23, 23) -> (35, 39)
+
     print("=== Day 15, Task 1 ===")
 
     verbose = True
+    shape = (42,42)
+    start_pos = (shape[0]//2, shape[1]//2)
 
     remote = RemoteControl()
-    remote.board = Board((10,10))
-    print(remote.board.visualize())
-    exit(100)
+    remote.board = Board(shape, start_pos)
+
+    # print(remote.board.visualize())
 
     remote.program = Tape.read_from_file("input.txt")
     remote.verbose = verbose
     # remote.computer.verbose = verbose
 
-    remote.board = Board((10,10))
-    
     remote.execute()
 
+    print(f"Start -> Goal: {start_pos} -> {remote.board.goal}")
+
+    # compute manhattan distance between starting point and goal point
+    # WRONG: need to trace the path
+    #remote.board.manhattan_distance_between(start, goal)
 
 def run_tests_15_2():
-    
+
     print("=== Day 15, Task 2 (tests) ===")
     pass
 
@@ -209,9 +286,7 @@ def run_day_15_2():
 
 if __name__ == '__main__':
     run_tests_15_1()
-    # run_day_15_1()
+    run_day_15_1()
 
     # run_tests_15_2()
     # run_day_15_2()
-
-    
