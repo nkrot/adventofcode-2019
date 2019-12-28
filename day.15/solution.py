@@ -12,6 +12,7 @@ import random
 from aoc.intcode import Tape, Interpreter
 
 import numpy as np
+np.set_printoptions(linewidth=1000, threshold=np.inf)
 
 ################################################################################
 
@@ -124,7 +125,6 @@ class RemoteControl(object):
 
         elif code == self.GOAL:
             self.board.mark_as(pos, Board.GOAL)
-            #self.board.move_player_to(pos)
             self.goal_found = True
 
         else:
@@ -159,6 +159,9 @@ class RemoteControl(object):
 
 class Board(object):
 
+    # TODO: there is an inconsistency in how this statuses are represented:
+    # some of them are in the matrix, while others are tracked via variables.
+
     UNKNOWN = 0  # unopened cell (initial state)
     OPEN    = 1  # pass is possible
     WALL    = 2  # wall hit, pass not possible
@@ -184,6 +187,16 @@ class Board(object):
         self.player = self.origin # position of the player as tuple (x,y)
         self.goal = None
 
+    @property
+    def origin(self):
+        return self._origin
+
+    @origin.setter
+    def origin(self, pos):
+        self._origin = pos
+        if pos is not None:
+            self.mark_as(pos, self.OPEN) # for logical consistency
+
     def __getitem__(self, pos):
         return self.matrix[pos]
 
@@ -192,14 +205,11 @@ class Board(object):
 
     def mark_as(self, pos, code):
         """
-        Mark given position <pos> as one of UNKNOWN|OPEN|WALL|GOAL|PLAYER
+        Mark given position <pos> as one of OPEN|WALL|GOAL
         """
-        if code == self.PLAYER:
-            self.move_player_to(pos)
-        else:
-            self.matrix[pos] = code
-            if code == self.GOAL:
-                self.goal = pos
+        self.matrix[pos] = code
+        if code == self.GOAL:
+            self.goal = pos
 
     def visualize(self):
         """
@@ -214,10 +224,10 @@ class Board(object):
 
     @property
     def _matrix_with_player(self):
-        matrix = self.matrix
+        matrix = self.matrix.copy()
         if self.player is not None:
-            matrix = self.matrix.copy()
             matrix[self.player] = self.PLAYER
+        if self.origin is not None:
             matrix[self.origin] = self.ORIGIN
         return matrix
 
@@ -256,6 +266,18 @@ class Board(object):
         count = sides.count(self.WALL) + sides.count(self.DEADEND)
         return count > 2
 
+    @property
+    def length_of_open_path(self):
+        """
+        Note that
+        * the GOAL cell is not marked as OPEN
+        * the ORIGIN and PLAYER cell must be marked as OPEN for the count to be correct
+        """
+        # print(self.matrix)
+        m = np.where(self.matrix == self.OPEN, 1, 0)
+        n_steps = m.sum()
+        return n_steps
+
 ################################################################################
 
 def run_tests_15_1():
@@ -272,7 +294,7 @@ def run_tests_15_1():
     board.mark_as((2,2), board.OPEN)
 
     board.mark_as((2,3), board.GOAL)
-    board.mark_as((2,4), board.PLAYER)
+    board.move_player_to((2,4))
 
     print(board.visualize())
 
@@ -289,14 +311,12 @@ def run_day_15_1():
     print("=== Day 15, Task 1 ===")
     expected = 220
 
-    verbose = True
+    verbose = not True
     shape = (42,42) # optimal
     start_pos = (shape[0]//2, shape[1]//2)
 
     remote = RemoteControl()
     remote.board = Board(shape, start_pos)
-
-    # print(remote.board.visualize())
 
     remote.program = Tape.read_from_file("input.txt")
     remote.verbose = verbose
@@ -304,12 +324,20 @@ def run_day_15_1():
 
     remote.execute()
 
+    print("--- Final state of the Board ---")
     print(remote.board.visualize())
-    print(f"Start -> Goal: {start_pos} -> {remote.board.goal}")
+    print(f"Start -> Goal: {remote.board.origin} -> {remote.board.goal}")
 
-    # compute manhattan distance between starting point and goal point
-    # WRONG: need to trace the path
-    #remote.board.manhattan_distance_between(start, goal)
+    # TODO/Caveat: IMO, this is not obligatorily the shortest path between ORIGIN and
+    # GOAL. There can be other, shorter, paths, but the algorithm stops before it finds
+    # them. However, the answer matches the expected answer as per autograder.
+    res = remote.board.length_of_open_path
+    print(f"Answer: distance between ORIGIN and GOAL in movements: {res}")
+
+    if res == expected:
+        print(f"SUCCESS: Got {res} as expected")
+    else:
+        print(f"FAILED: Expected {expected} but got {res}")
 
 def run_tests_15_2():
 
@@ -322,7 +350,7 @@ def run_day_15_2():
     pass
 
 if __name__ == '__main__':
-    run_tests_15_1()
+    # run_tests_15_1() # ok
     run_day_15_1()
 
     # run_tests_15_2()
