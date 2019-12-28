@@ -79,7 +79,12 @@ class RemoteControl(object):
 
     @property
     def finished(self):
+        # TODO: is the task of finding the shortest path between ORIGIN and GOAL,
+        # we may need to inspect the whole board and find all possible paths.
+        # Therefore, we should not stop
+        #return self.computer.finished
         return self.computer.finished or self.goal_found
+        #return False
 
     def generate_movement_instruction(self):
         """
@@ -88,8 +93,7 @@ class RemoteControl(object):
 
         # prefer an UNKNOWN cell over any other
         # if there are no unknown cells remaining, choose an OPEN path
-        # when choosing an OPEN path, disfavour the one from where we have come
-        # TODO: mark somehow a path that leads to a dead end
+        # TODO: when choosing an OPEN path, disfavour the one from where we have come
         moves = [(self.board[self.attempted_position(mc)], mc) for mc in self.MOVEMENTS]
         for g in [Board.UNKNOWN, Board.OPEN]:
             _moves = [m for m in moves if m[0] == g]
@@ -97,9 +101,8 @@ class RemoteControl(object):
                 self.movement_command = random.choice(_moves)[1]
                 break
 
-            self.movement_commands.append(self.movement_command)
-
-            # self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
+        self.movement_commands.append(self.movement_command)
+        # self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
 
     def interpret_status_code(self):
         """
@@ -109,19 +112,33 @@ class RemoteControl(object):
         code = self.droid_status_codes.pop(0)
 
         pos = self.attempted_position()
+
         if code == self.WALL:
             self.board.mark_as(pos, Board.WALL)
-            # droid did not move
+            self._mark_dead_end_path()
 
         elif code == self.EMPTY:
             self.board.mark_as(pos, Board.OPEN)
+            self._mark_dead_end_path()
             self.board.move_player_to(pos)
 
         elif code == self.GOAL:
             self.board.mark_as(pos, Board.GOAL)
+            #self.board.move_player_to(pos)
             self.goal_found = True
+
         else:
             raise ValueError(f"Illegal code received from Repair Droid: {code}")
+
+    def _mark_dead_end_path(self):
+        """
+        Inspect current player position and mark is as DEADEND.
+        Doing this will help us direct the droid at subsequent steps by preventing
+        the the droid is sent in the direction of a DEADEND.
+        """
+
+        if self.board.is_dead_end(self.board.player):
+            self.board.mark_as(self.board.player, Board.DEADEND)
 
     def attempted_position(self, mc=None):
         """
@@ -147,19 +164,24 @@ class Board(object):
     WALL    = 2  # wall hit, pass not possible
     GOAL    = 3  # the cell is the goal
     PLAYER  = 4  # current position of the player
+    DEADEND = 5  # the cell is a deadend or belongs to a path leading to it
+    ORIGIN  = 6  # initial position
 
     FIGURES = {
         UNKNOWN: '.',
-        OPEN:    '+',
+        OPEN:    ' ',
         WALL:    '#',
         GOAL:    'G',
-        PLAYER:  'D'
+        PLAYER:  'D',
+        DEADEND: '=',
+        ORIGIN:  'O'
     }
 
     def __init__(self, shape, start_pos=None):
         self.shape = shape
         self.matrix = np.zeros(shape, dtype=np.int8)
-        self.player = start_pos # position of the player as tuple (x,y)
+        self.origin = start_pos
+        self.player = self.origin # position of the player as tuple (x,y)
         self.goal = None
 
     def __getitem__(self, pos):
@@ -196,6 +218,7 @@ class Board(object):
         if self.player is not None:
             matrix = self.matrix.copy()
             matrix[self.player] = self.PLAYER
+            matrix[self.origin] = self.ORIGIN
         return matrix
 
     def north_of(self, pos=None):
@@ -215,11 +238,23 @@ class Board(object):
         Apply given <update> vector to given position vector <pos> and return
         obtained position, as tuple (x,y)
         """
-        x = pos[0]+update[0]
-        y = pos[1]+update[1]
+        x = pos[0] + update[0]
+        y = pos[1] + update[1]
         assert 0 <= x < self.shape[0], f"Coordinate x out of bound: {x}"
         assert 0 <= y < self.shape[1], f"Coordinate y out of bound: {y}"
         return (x,y)
+
+    def is_dead_end(self, pos):
+        if pos == self.origin:
+            return False
+
+        sides = [ self.north_of(pos),
+                  self.south_of(pos),
+                  self.west_of(pos),
+                  self.east_of(pos) ]
+        sides = [ self[s] for s in sides ]
+        count = sides.count(self.WALL) + sides.count(self.DEADEND)
+        return count > 2
 
 ################################################################################
 
@@ -252,9 +287,10 @@ def run_day_15_1():
     #Start -> Goal: (23, 23) -> (35, 39)
 
     print("=== Day 15, Task 1 ===")
+    expected = 220
 
     verbose = True
-    shape = (42,42)
+    shape = (42,42) # optimal
     start_pos = (shape[0]//2, shape[1]//2)
 
     remote = RemoteControl()
@@ -268,6 +304,7 @@ def run_day_15_1():
 
     remote.execute()
 
+    print(remote.board.visualize())
     print(f"Start -> Goal: {start_pos} -> {remote.board.goal}")
 
     # compute manhattan distance between starting point and goal point
