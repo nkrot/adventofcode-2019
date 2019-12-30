@@ -179,7 +179,7 @@ class Board(object):
         GOAL:    'G',
         PLAYER:  'D',
         DEADEND: '=',
-        ORIGIN:  'O'
+        ORIGIN:  'S'
     }
 
     def __init__(self, shape, start_pos=None):
@@ -224,6 +224,12 @@ class Board(object):
         if code == self.GOAL:
             self.goal = pos
 
+    def unmark_dead_end_paths(self):
+        """
+        Clear the markup of DEADEND replacing it with normal OPEN
+        """
+        self.matrix[self.matrix == self.DEADEND] = self.OPEN
+
     def visualize(self):
         """
         Generate a string representing the board in human-readable format.
@@ -242,6 +248,8 @@ class Board(object):
             matrix[self.player] = self.PLAYER
         if self.origin is not None:
             matrix[self.origin] = self.ORIGIN
+        if self.goal is not None:
+            matrix[self.goal] = self.GOAL
         return matrix
 
     def north_of(self, pos=None):
