@@ -184,7 +184,9 @@ class Board(object):
 
     def __init__(self, shape, start_pos=None):
         self.shape = shape
-        self.matrix = np.zeros(shape, dtype=np.int8)
+        self.matrix = np.zeros(self.shape, dtype=np.int8)
+        self.distances = np.zeros(self.shape, dtype=np.int32)
+        self.distances[self.distances == 0] = -1
         self.origin = start_pos
         self.player = self.origin # position of the player as tuple (x,y)
         self.goal = None
@@ -196,14 +198,23 @@ class Board(object):
     @origin.setter
     def origin(self, pos):
         self._origin = pos
-        if pos is not None:
-            self.mark_as(pos, self.OPEN) # for logical consistency
+        if self.origin is not None:
+            self.mark_as(self.origin, self.OPEN) # for logical consistency
+        if self.origin is not None and self.distances is not None:
+            self.distances[self.origin] = 0
 
     def __getitem__(self, pos):
         return self.matrix[pos]
 
+    def distance_to(self, pos):
+        return self.distances[pos]
+
     def move_player_to(self, pos):
+        oldpos = self.player
         self.player = pos
+
+        if self.distance_to(self.player) == -1:
+            self.distances[self.player] = 1 + self.distance_to(oldpos)
 
     def mark_as(self, pos, code):
         """
@@ -268,17 +279,21 @@ class Board(object):
         count = sides.count(self.WALL) + sides.count(self.DEADEND)
         return count > 2
 
-    @property
-    def length_of_open_path(self):
-        """
-        Note that
-        * the GOAL cell is not marked as OPEN
-        * the ORIGIN and PLAYER cell must be marked as OPEN for the count to be correct
-        """
-        # print(self.matrix)
-        m = np.where(self.matrix == self.OPEN, 1, 0)
-        n_steps = m.sum()
-        return n_steps
+    # @property
+    # def length_of_open_path(self):
+    #     """
+    #     Note that
+    #     * the GOAL cell is not marked as OPEN
+    #     * the ORIGIN and PLAYER cell must be marked as OPEN for the count to be correct
+    #
+    #     This approach gives correct answer if the droid has stopped as soon as it
+    #     has found the goal. Alternatively, when the droid continues running and
+    #     eventually reaches the ORIGIN, there are no open paths on the board.
+    #     """
+    #     # print(self.matrix)
+    #     m = np.where(self.matrix == self.OPEN, 1, 0)
+    #     n_steps = m.sum()
+    #     return n_steps
 
 ################################################################################
 
