@@ -86,12 +86,7 @@ class RemoteControl(object):
 
     @property
     def finished(self):
-        # TODO: is the task of finding the shortest path between ORIGIN and GOAL,
-        # we may need to inspect the whole board and find all possible paths.
-        # Therefore, we should not stop
-        #return self.computer.finished
-        return self.computer.finished or self.goal_found
-        #return False
+        return self.goal_found and self.board.player == self.board.origin
 
     def generate_movement_instruction(self):
         """
@@ -130,6 +125,7 @@ class RemoteControl(object):
             self.board.move_player_to(pos)
 
         elif code == self.GOAL:
+            self.board.move_player_to(pos)
             self.board.mark_as(pos, Board.GOAL)
             self.goal_found = True
 
