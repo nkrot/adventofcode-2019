@@ -375,6 +375,11 @@ def run_tests_15_2():
 
 
 def run_day_15_2():
+    """
+    Use the repair droid to get a complete map of the area.
+    How many minutes will it take to fill with oxygen?
+    """
+
     print("=== Day 15, Task 2 ===")
     pass
 
