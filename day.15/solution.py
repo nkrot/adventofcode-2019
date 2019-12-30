@@ -110,7 +110,7 @@ class RemoteControl(object):
         """
         Interpret the status code from the repair droid
         """
-        # self._vprint(f"State of status codes (droid -> remote control): {self.droid_status_codes}")
+        self._vprint(f"Droid is at {self.board.player} (distance: {self.board.distance_to(self.board.player)}) and emits status code: {self.droid_status_codes}")
         code = self.droid_status_codes.pop(0)
 
         pos = self.attempted_position()
@@ -337,8 +337,8 @@ def run_day_15_1():
     expected = 220
 
     verbose = not True
-    shape = (42,42) # optimal
-    start_pos = (shape[0]//2, shape[1]//2)
+    shape = (41,41) # optimal
+    start_pos = (1+shape[0]//2, 1+shape[1]//2)
 
     remote = RemoteControl()
     remote.board = Board(shape, start_pos)
@@ -350,15 +350,18 @@ def run_day_15_1():
 
     remote.execute()
 
-    print("--- Final state of the Board ---")
-    print(remote.board.visualize())
-    print(f"Start -> Goal: {remote.board.origin} -> {remote.board.goal}")
+    res = remote.board.distance_to(remote.board.goal)
 
-    # TODO/Caveat: IMO, this is not obligatorily the shortest path between ORIGIN and
-    # GOAL. There can be other, shorter, paths, but the algorithm stops before it finds
-    # them. However, the answer matches the expected answer as per autograder.
-    res = remote.board.length_of_open_path
-    print(f"Answer: distance between ORIGIN and GOAL in movements: {res}")
+    print("------- Board final state -------")
+    remote.board.unmark_dead_end_paths()
+    print(remote.board.visualize())
+    print(f"Start -> Goal: {remote.board.origin} -> {remote.board.goal}, distance: {res}")
+
+    print(f"Answer: distance between START and GOAL in movements: {res}")
+
+    if verbose:
+        print("--- Matrix of distances from ORIGIN ---")
+        print(remote.board.distances)
 
     if res == expected:
         print(f"SUCCESS: Got {res} as expected")
