@@ -14,6 +14,8 @@ from aoc.intcode import Tape, Interpreter
 import numpy as np
 np.set_printoptions(linewidth=1000, threshold=np.inf)
 
+import copy
+import time
 ################################################################################
 
 class RemoteControl(object):
@@ -86,6 +88,7 @@ class RemoteControl(object):
 
     @property
     def finished(self):
+        #return self.goal_found
         return self.goal_found and self.board.player == self.board.origin
 
     def generate_movement_instruction(self):
@@ -171,6 +174,7 @@ class Board(object):
     PLAYER  = 4  # current position of the player
     DEADEND = 5  # the cell is a deadend or belongs to a path leading to it
     ORIGIN  = 6  # initial position
+    OXYGEN  = 7
 
     FIGURES = {
         UNKNOWN: '.',
@@ -178,8 +182,9 @@ class Board(object):
         WALL:    '#',
         GOAL:    'G',
         PLAYER:  'D',
-        DEADEND: '=',
-        ORIGIN:  'S'
+        DEADEND: '-',
+        ORIGIN:  'S',
+        OXYGEN:  'o'
     }
 
     def __init__(self, shape, start_pos=None):
@@ -190,6 +195,12 @@ class Board(object):
         self.origin = start_pos
         self.player = self.origin # position of the player as tuple (x,y)
         self.goal = None
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    def reset_distances(self):
+        self.distances[self.distances != -1] = -1
 
     @property
     def origin(self):
@@ -219,6 +230,7 @@ class Board(object):
     def mark_as(self, pos, code):
         """
         Mark given position <pos> as one of OPEN|WALL|GOAL
+        NOTE: do not use it to set ORIGIN
         """
         self.matrix[pos] = code
         if code == self.GOAL:
@@ -303,6 +315,109 @@ class Board(object):
     #     n_steps = m.sum()
     #     return n_steps
 
+class OxygenSystem(object):
+    """
+    There are implemented two algoritms for computing the amount of time (minutes)
+    needed to fill the area with oxygen. One uses distance matrix, and the other one
+    relies on counting clock_ticks. The latter one is easier, but it emerged as
+    a by-product of implementing human-friendly visualization. Haha :)
+    """
+
+    def __init__(self, area, pos):
+        self.board = area
+        self.generator = pos
+        self._reset()
+        self.verbose = False
+        self.show_progress = False
+        self.queue = []
+        self.clock_ticks = 0
+        self.longest_corridor_length = 0
+
+    def _reset(self):
+        self.board.reset_distances()
+        self.board.goal   = None
+        self.board.origin = self.generator
+        self.board.player = None # self.generator
+
+    def execute(self):
+
+        if self.show_progress:
+            print("=== Oxygen System has been launched ===")
+            print(self.board.visualize())
+            # print("--- Initial matrix of distances ---")
+            # print(self.board.distances)
+
+        self._fill()
+
+        # if self.verbose:
+        #     print("--- Final matrix of distances ---")
+        #     print(self.board.distances)
+
+        self.longest_corridor_length = self.board.distances.max()
+        
+        return self.longest_corridor_length
+
+    @property
+    def minutes_till_filled(self):
+        """
+        How many minutes will it take to fill the area with oxygen.
+
+        In the current implementation, there are two methods of finding this value:
+        - original solution: the longest distance from ORIGIN (the generator) to
+          the farthest point in a corridor: self.longest_corridor_length;
+        - additional solution: the number of clock ticks. We need to -1, because
+          in the definition of the task, the cell that has the GENERATOR is assumed
+          to be filled with oxygen, but the algorithm fills it explicitly.
+        """
+        return self.clock_ticks - 1
+    
+    def _fill(self):
+        """
+        Fill the space with OXYGEN starting from the location of the generator.
+
+        To make visualization human-friendly, we simulate time ticks and make pauses
+        after each time tick. Within one tick, all cells are filled at once.
+        """
+
+        self.queue.append((self.generator, -1))
+
+        self.clock_ticks = 0
+        while len(self.queue) > 0:
+            self.clock_ticks += 1
+            self._fill_at_once(len(self.queue))
+
+            if self.show_progress:
+                msg = f"--- Oxygen is spreading, {self.clock_ticks} ---\n"
+                msg += self.board.visualize()
+                print(msg)
+                time.sleep(0.4)
+
+    def _fill_at_once(self, n):
+        """
+        Fill cells (as many as *n*). This is one time tick.
+
+        Add cells to the queue, that are to be filled at the next tick. These are
+        cells adjacent to the original n cells.
+        """
+
+        for i in range(0, n):
+            pos, dst = self.queue.pop(0)
+            self.board.distances[pos] = 1 + dst
+            self.board.mark_as(pos, Board.OXYGEN)
+
+            neighbors = [
+                self.board.north_of(pos),
+                self.board.south_of(pos),
+                self.board.west_of(pos),
+                self.board.east_of(pos),
+            ]
+
+            # select positions that belong to a corridor and are not yet filled with oxygen
+            neighbors = [ (nei, self.board.distances[pos]) for nei in neighbors
+                          if self.board[nei] == Board.OPEN ]
+
+            self.queue.extend(neighbors)
+
 ################################################################################
 
 def run_tests_15_1():
@@ -368,24 +483,38 @@ def run_day_15_1():
     else:
         print(f"FAILED: Expected {expected} but got {res}")
 
-def run_tests_15_2():
-
-    print("=== Day 15, Task 2 (tests) ===")
-    pass
+    return remote.board
 
 
-def run_day_15_2():
+def run_day_15_2(board):
     """
     Use the repair droid to get a complete map of the area.
     How many minutes will it take to fill with oxygen?
     """
 
     print("=== Day 15, Task 2 ===")
-    pass
+
+    expected = 334
+
+    area = board.copy()
+    generator = OxygenSystem(area, board.goal)
+    generator.show_progress = True
+    generator.execute()
+
+    res  = generator.longest_corridor_length
+    res2 = generator.minutes_till_filled
+
+    # print(generator.board.visualize())
+
+    print(f"Answer: time required to fill the whole area with oxygen is: {res}")
+
+    if res == expected and res2 == expected:
+        print(f"SUCCESS: Got {res} and {res2} as expected")
+    else:
+        print(f"FAILED: Expected {expected} but got {res} and {res2}")
 
 if __name__ == '__main__':
     # run_tests_15_1() # ok
-    run_day_15_1()
+    board = run_day_15_1() #ok
 
-    # run_tests_15_2()
-    # run_day_15_2()
+    run_day_15_2(board)
