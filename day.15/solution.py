@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # # #
-# TODO: reuse day 11 PaintingRobot or 13 arcade.Game?
+#
 #
 
 import os
@@ -36,6 +36,7 @@ class RemoteControl(object):
         if program is not None:
             self.program = program
         self.verbose = False
+        self.show_progress = False
         self.board = None
         self.goal_found = False
 
@@ -76,7 +77,12 @@ class RemoteControl(object):
             self.generate_movement_instruction()
             self.computer.execute()
             self.interpret_status_code()
-            self._vprint(f"--- Board state ---\n{self.board.visualize()}\n------")
+
+            if self.show_progress:
+                msg  = "---------- Board state ----------\n"
+                msg += self.board.visualize()
+                msg += "\n---------------------------------"
+                print(msg)
 
     @property
     def finished(self):
@@ -103,7 +109,7 @@ class RemoteControl(object):
                 break
 
         self.movement_commands.append(self.movement_command)
-        # self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
+        self._vprint(f"State of movement commands (remote control -> droid): {self.movement_commands}")
 
     def interpret_status_code(self):
         """
@@ -320,6 +326,7 @@ def run_day_15_1():
 
     remote.program = Tape.read_from_file("input.txt")
     remote.verbose = verbose
+    remote.show_progress = True # will show the board
     # remote.computer.verbose = verbose
 
     remote.execute()
