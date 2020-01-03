@@ -16,12 +16,15 @@ class Tape(object):
         lines = [ line.strip() for line in lines ]
         return cls(lines[0])
 
-    def __init__(self, s):
+    def __init__(self, s=None):
         if isinstance(s, self.__class__):
             self.cells = list(s.cells)
             self.position = s.position
-        else:
+        elif s is not None:
             self.cells = [int(i) for i in s.split(',')]
+            self.position = 0
+        else:
+            self.cells = []
             self.position = 0
 
     def patch(self, corrections):
@@ -125,3 +128,21 @@ class Tape(object):
 
     def __str__(self):
         return ",".join([str(i) for i in self.cells])
+
+    def append(self, data, converter=None):
+        """
+        Introduced in day 17p2
+        Add to the tape new element(s).
+        TODO: support adding negative values
+        """
+        
+        if isinstance(data, type([])):
+            for d in data:
+                self.append(d, converter)
+        else:
+            _d = converter(data) if converter else data
+            if isinstance(_d, int):
+                self.cells.append(_d)
+            else:
+                raise ValueError(f"Can not add value of type {type(_d)} to the tape: {data}")
+
