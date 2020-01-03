@@ -2,12 +2,12 @@
 
 # # #
 # TODO
-# 0. how to capture the output of the robot (the last value it outputs)?
-# 1. refactor CommandEncoder:
+# 1. rename BoardBuilder to VideoDisplay?
+# 2. refactor CommandEncoder:
 #    * name things meaningfully
 #    * do not generate what is not required
-# 2. what does 'continuous video feed' does?
-# 3. implement computing the path (now hardcoded in BoardBuilder.path)
+# 3. what does 'continuous video feed' does?
+# 4. implement computing the path (now hardcoded in BoardBuilder.path)
 
 import os
 import sys
@@ -50,8 +50,8 @@ class BoardBuilder(object):
         print(self.visualize())
 
         intersections = self.find_intersections()
-        print(f"--- intersections {len(intersections)} ---")
-        print(intersections)
+        # print(f"--- intersections {len(intersections)} ---")
+        # print(intersections)
         self.total_alignment = sum([x*y for x,y in intersections])
 
     def visualize(self, board=None):
@@ -224,6 +224,12 @@ def run_tests_17_2():
 
 
 def run_day_17_1():
+    """
+    What is the sum of the alignment parameters for the scaffold intersections?
+    """
+
+    print("=== Day 17, Task 1 ===")
+
     tape = Tape.read_from_file("input.txt")
     expected = 13580
 
@@ -243,31 +249,35 @@ def run_day_17_2():
     After visiting every part of the scaffold at least once, 
     how much dust does the vacuum robot report it has collected?
     """
+    print("=== Day 17, Task 2 ===")
 
     expected = 1063081
 
-    bb = BoardBuilder()
+    tape = Tape.read_from_file("input.txt")
+    tape.write_to(0,2)
+
+    bb = BoardBuilder(tape)
+
     enc = CommandEncoder(3, 10)
     enc.execute(bb.path)
 
+    # TODO: movement instructions are given as a sequence of individual integers
+    # (now available as Tape.cells). CommandEncoder can now be simplified.
     print(f"Number of command variations: {len(enc.subsequences)}")
     decomposition = enc.subsequences[0]
     commands = []
     for t in enc.to_tapes(decomposition):
         commands.extend(list(t.cells))
 
-    # provide continuous video feed
+    # provide continuous video feed?
     yes = [ord('y'), ord('\n')]
     no =  [ord('n'), ord('\n')]
-    commands.extend(no)
-    
-    tape = Tape.read_from_file("input.txt")
-    tape.write_to(0,2)
-    
-    computer = Interpreter(tape, commands)
-    computer.execute()
+    commands.extend(not)
 
-    res = -1
+    bb.computer.inputs = commands
+    bb.execute()
+
+    res = bb.computer.outputs.pop()
     print(f"Answer: amount of dust the robot collected: {res}")
 
     if res == expected:
@@ -304,9 +314,9 @@ def run_tests_create_tape():
 ################################################################################
 
 if __name__ == '__main__':
-    # run_day_17_1()
+    # run_day_17_1() # ok
 
-    #run_tests_create_tape()
+    # run_tests_create_tape()
 
     # run_tests_17_2()
     run_day_17_2()
