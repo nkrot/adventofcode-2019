@@ -1,14 +1,14 @@
 #
 # TODO
-# 1. day 11 may have broken solutions to 5,7,9 (recursion has been removed). 
-#
+# 1. day 11 may have broken solutions to 5,7,9 (recursion has been removed).
+# 2. can yield be used in do_output to imitate switching?
 
 import sys
 from .tape import Tape
 
 class Interpreter(object):
     opcodes = [1,2,3,4,5,6,7,8,99]
-    
+
     def __init__(self, tape, inputs=None, outputs=None):
         self.tape = Tape(tape) if isinstance(tape, str) else tape
         self.verbose = False
@@ -112,12 +112,12 @@ class Interpreter(object):
 
         elif self.running >= 1:
             self.status = "RESUMING"
-            
+
         elif self.running == -1:
             return self.result
 
         self._vprint(f"{self._about()} is {self.status} inputs={self.inputs}")
-        
+
         while self.running == 1:
             code = self.read_opcode()
 
@@ -138,12 +138,12 @@ class Interpreter(object):
                 # (day 11) wait for input, alternative to mutual recursion
                 self.running = 1
                 break
-            
+
         return self.tape.at(0) # not always :(
 
     def _about(self):
         return f"DEVICE {self.__class__.__name__} with id={self.device_id}"
- 
+
     def set_uplink_to(self, other):
         self.uplink  = other
         self.outputs = self.uplink.inputs
@@ -164,7 +164,7 @@ class Interpreter(object):
         Return True if computer has come to a halt
         """
         return self.running == -1
-    
+
     def read_opcode(self):
         del self.param_modes[:]
         code = self.tape.read()
@@ -178,7 +178,7 @@ class Interpreter(object):
             code = code % 100
 
         return code
-    
+
     def do_read_input(self):
         addr = self.tape.position
         self._vprint(f"ADDR={addr}, READ-INPUT, param modes: {self.param_modes}")
@@ -207,10 +207,13 @@ class Interpreter(object):
         if self.uplink is not None:
             # works for day 7, 9 but creates deep recursion in day 11
             #self.uplink.execute()
-            
+
             # introduced in day 11
             # TODO: test if it works for day 7, 9
             self.running = 2
+
+            # TODO: can it be reused in previous days: 7,9,11,15 etc
+            #yield self.outputs
 
     def do_adjust_relative_base(self):
         addr = self.tape.position
@@ -218,7 +221,7 @@ class Interpreter(object):
         self.relative_base += arg_1
         self._vprint(f"ADDR={addr}, ADJUST-REL-BASE, params {(arg_1)} sets relative base to {self.relative_base}")
         self._vprint(f"Tape: {self.tape}")
-        
+
     def do_sum(self):
         addr = self.tape.position
         self._vprint(f"ADDR={addr}, SUM, PARAM modes: {self.param_modes}")
@@ -274,11 +277,11 @@ class Interpreter(object):
             self.tape.rewind(arg_2)
             action = f"jump to {arg_2}"
         self._vprint(f"ADDR={addr}, JUMP-IF-TRUE, params: {(arg_1, arg_2)} {action}")
-        self._vprint(f"Tape: {self.tape}")        
+        self._vprint(f"Tape: {self.tape}")
 
     def do_jump_if_false(self):
         """
-        if the first parameter is zero, it sets the instruction pointer to the value 
+        if the first parameter is zero, it sets the instruction pointer to the value
         from the second parameter. Otherwise, it does nothing.
         """
         addr = self.tape.position
@@ -289,7 +292,7 @@ class Interpreter(object):
             self.tape.rewind(arg_2)
             action = f"jump to {arg_2}"
         self._vprint(f"ADDR={addr}, JUMP-IF-FALSE, params: {(arg_1, arg_2)} {action}")
-        self._vprint(f"Tape: {self.tape}")        
+        self._vprint(f"Tape: {self.tape}")
 
     def read_param(self, immediate=False):
         """
@@ -297,7 +300,7 @@ class Interpreter(object):
         Reading algorithm is determined by the parameter mode <pmode>
           0 -- positional mode: the value is an address of the actual value
           1 -- immediate mode: the value is the actual value
-          2 -- relative mode, is like positional but the value is the offset that, 
+          2 -- relative mode, is like positional but the value is the offset that,
                when combined with relative base, becomes the value
         Providing immediate=True forces the value to NOT be interpretet as address
         but rather the value itself. In other words, it forbids the interpretation
@@ -332,7 +335,7 @@ class Interpreter(object):
 
         if len(self.param_modes) > 0:
             return self.param_modes.pop(0)
-        
+
         return otherwise
 
     def _vprint(self, msg):
