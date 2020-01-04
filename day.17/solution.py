@@ -3,10 +3,7 @@
 # # #
 # TODO
 # 1. rename BoardBuilder to VideoDisplay?
-# 2. refactor CommandEncoder:
-#    * name things meaningfully
-#    * do not generate what is not required
-# 4. implement computing the path (now hardcoded in BoardBuilder.path)
+# 2. implement computing the path (now hardcoded in BoardBuilder.path)
 
 import os
 import sys
@@ -18,8 +15,6 @@ from aoc.intcode import Tape, Interpreter
 from copy import deepcopy
 import numpy as np
 from pprint import pprint
-
-import itertools # danger! python's coprophagy is imported
 
 class Board(object):
     SCAFFOLD = 35
@@ -130,10 +125,10 @@ class CommandEncoder(object):
     def __init__(self, max_components=None, max_length=None):
         self.max_components = max_components or 3
         self.max_length = max_length or 10
-        self.subsequences = []
+        self.decompositions = []
         self.function_names = {0: 'A', 1: 'B', 2: 'C'}
 
-    def execute(self, seq):
+    def analyse_path(self, seq):
         if isinstance(seq, type([])):
             items = deepcopy(seq)
         else:
@@ -144,13 +139,18 @@ class CommandEncoder(object):
         """
         Given a sequence (a list <items>), find a number of subsequence from which
         the original sequence can be constructed such that
-        * subsequences can be repeated
-        * the number of subsequences does not exceed <self.max_components>
+        * decompositions can be repeated
+        * the number of decompositions does not exceed <self.max_components>
         * the length of each subsequence does not exceed <self.max_length>
+        Results
+        * is a list of tuples, where each tuple represents one possible decomposition
+        * each tuple (decomposition) contains: a list of decompositions and a list of
+          subsequence indices such that, when referenced decompositions are combined,
+          the whole original sequence (<items>) is obtained.
         """
 
         if len(items) == 0:
-            self.subsequences.append( (deepcopy(parts), deepcopy(part_ids)) )
+            self.decompositions.append( (deepcopy(parts), deepcopy(part_ids)) )
             return True
 
         level = len(part_ids)
@@ -176,33 +176,39 @@ class CommandEncoder(object):
 
         return True
 
-    def to_strings(self, subsequence):
+    def to_tape(self, items):
         """
-        Convert <subsequence> (as those stored in self.subsequences) to strings
-        TODO: this is ugly
+        Build a Tape from list of strings given in <items>, inserting a comma between
+        individual items and adding a newline after the last item.
         """
-        _parts, _names = subsequence
-        names = self._add_commas([self.function_names[n] for n in _names])
-        parts = [self._add_commas(part) for part in _parts]
-        return ["".join(names)] + [ "".join(p) for p in parts]
+        tape = Tape()
+        separators = [','] * (len(items)-1) + ['\n']
+        for item,sep in zip(items,separators):
+            tape.append(item, ord)
+            tape.append(sep, ord)
+        return tape
 
-    def to_tapes(self, subsequence):
+    def to_tapes(self, decomposition):
         """
-        TODO: this is ugly
+        Converts one decomposition (a tuple of lists as explained in self._decompose())
+        a list of Tapes in the order
+         at 0: tape with main function
+         at 1: tape with function A
+         at 2: tape with function B
+         at 3: tape with function C
+        Please refer to task.txt for definition of main function and functions A, B, C
         """
-        ss = self.to_strings(subsequence)
         tapes = []
-        for s in ss:
-            tape = Tape()
-            tape.append(list(s+'\n'), ord)
-            tapes.append(tape)
-        return tapes
 
-    def _add_commas(self, elems):
-        # DANGER: python coprophagy!
-        elems_with_commas = list(itertools.chain.from_iterable(zip(elems, [',']*len(elems))))
-        elems_with_commas.pop()
-        return elems_with_commas
+        # main function
+        names = [self.function_names[n] for n in decomposition[1]]
+        tapes.append(self.to_tape(names))
+
+        # functions
+        for p in decomposition[0]:
+            tapes.append(self.to_tape(p))
+
+        return tapes
 
 ################################################################################
 
@@ -211,19 +217,23 @@ def run_tests_17_2():
 
     tests = [
         ("R,8,R,8,R,4,R,4,R,8,L,6,L,2,R,4,R,4,R,8,R,8,R,8,L,6,L,2",
-         ["A,B,C,B,A,C", "R,8,R,8", "R,4,R,4,R,8", "L,6,L,2"],
+         ["A,B,C,B,A,C\n", "R,8,R,8\n", "R,4,R,4,R,8\n", "L,6,L,2\n"],
          ["65,44,66,44,67,44,66,44,65,44,67,10",
           "82,44,56,44,82,44,56,10",
           "82,44,52,44,82,44,52,44,82,44,56,10",
           "76,44,54,44,76,44,50,10"]),
 
         (board.path,
-         ['A,A,B,C,B,C,B,C,B,A', 'R,6,L,9,3,R,6', 'L,9,3,R,6,L,8,L,9,3', 'R,9,3,L,9,1,L,9,1'],
+         ['A,A,B,C,B,C,B,C,B,A\n', 'R,6,L,9,3,R,6\n', 'L,9,3,R,6,L,8,L,9,3\n',
+          'R,9,3,L,9,1,L,9,1\n'],
          ['65,44,65,44,66,44,67,44,66,44,67,44,66,44,67,44,66,44,65,10',
           '82,44,54,44,76,44,57,44,51,44,82,44,54,10',
           '76,44,57,44,51,44,82,44,54,44,76,44,56,44,76,44,57,44,51,10',
-          '82,44,49,50,44,76,44,57,44,49,44,76,44,57,44,49,10'])
+          '82,44,57,44,51,44,76,44,57,44,49,44,76,44,57,44,49,10'])
     ]
+
+    def chr_tape(tape):
+        return "".join([chr(val) for val in tape.cells])
 
     for tst,exp,exp_ascii in tests:
         enc = CommandEncoder(3, 10)
@@ -231,9 +241,10 @@ def run_tests_17_2():
 
         ok = False
         fails = []
-        for idx,subseq in enumerate(enc.subsequences):
-            res = enc.to_strings(subseq)
-            res_ascii = [str(t) for t in enc.to_tapes(subseq)]
+        for idx,solution in enumerate(enc.decompositions):
+            tapes = enc.to_tapes(solution)
+            res       = [chr_tape(t) for t in tapes]
+            res_ascii = [str(t)      for t in tapes]
             if res == exp and res_ascii == exp_ascii:
                 ok = True
                 print(f"SUCCESS: Got as expected:\n{res}\n{res_ascii}")
@@ -245,7 +256,6 @@ def run_tests_17_2():
             shit = "\n".join(fails)
             msg = f"FAILED: Expected {res} but got {len(fails)} non-matches:\n{shit}"
             print(msg)
-
 
 def run_day_17_1():
     """
@@ -289,24 +299,22 @@ def run_day_17_2():
     tape = Tape.read_from_file("input.txt")
     tape.write_to(0,2)
 
-    enc = CommandEncoder()
-    enc.execute(path)
-
-    # TODO: movement instructions are given as a sequence of individual integers
-    # (now available as Tape.cells). CommandEncoder can now be simplified.
-    print(f"Number of command variations: {len(enc.subsequences)}")
-    decomposition = enc.subsequences[0]
+    # analyse path through the whole scaffold area and produce a program for
+    # the cleaning robot that comprises movement instructions.
     commands = []
-    for t in enc.to_tapes(decomposition):
+    enc = CommandEncoder()
+    enc.analyse_path(path)
+    print(f"Number of possible programms: {len(enc.decompositions)}")
+    for t in enc.to_tapes(enc.decompositions[0]):
         commands.extend(list(t.cells))
 
     # provide continuous video feed?
     # continous video feed will produce a full board after each robot movement
-    # This is very slow!
-    yes = [ord('y'), ord('\n')]
+    yes = [ord('y'), ord('\n')] # This is very slow!
     no =  [ord('n'), ord('\n')]
     commands.extend(no)
 
+    # finally, launch the robot
     bb = BoardBuilder(tape)
     bb.computer.inputs = commands
     bb.execute()
