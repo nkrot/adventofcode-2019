@@ -2,19 +2,18 @@
 
 # # #
 # TODO
-# 1. rename BoardBuilder to VideoDisplay?
+# 1. rename BoardBuilder to VideoDisplay or CleaningRobot?
 # 2. implement computing the path (now hardcoded in BoardBuilder.path)
 
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-import random
 
 from aoc.intcode import Tape, Interpreter
 
-from copy import deepcopy
+import random
 import numpy as np
-from pprint import pprint
+from copy import deepcopy
 
 class Board(object):
     SCAFFOLD = 35
