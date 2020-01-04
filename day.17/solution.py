@@ -22,49 +22,31 @@ from pprint import pprint
 
 import itertools # danger! python's coprophagy is imported
 
-class BoardBuilder(object):
-
+class Board(object):
     SCAFFOLD = 35
     OPEN     = 46
-    
-    def __init__(self, tape=None):
-        if tape is not None:
-            self.computer = Interpreter(tape)
-            self.computer.outputs = []
-        self.board = None
 
-    def execute(self):
-        rows = []
-        row = []
+    def __init__(self):
+        self.matrix = None
 
-        self.computer.execute()
-        for code in self.computer.outputs:
-            if chr(code) == '\n':
-                if len(row) > 0:
-                    rows.append(row)
-                row = []
-            else:
-                row.append(code)
-    
-        self.board = np.array(rows)
-        print(self.visualize())
-
+    @property
+    def total_alignment(self):
         intersections = self.find_intersections()
         # print(f"--- intersections {len(intersections)} ---")
         # print(intersections)
-        self.total_alignment = sum([x*y for x,y in intersections])
+        return sum([x*y for x,y in intersections])
 
-    def visualize(self, board=None):
-        board = board or self.board
+    def visualize(self):
+        # print(f"Board shape: {matrix.shape}")
         lines = []
-        for row in board:
+        for row in self.matrix:
             line = " ".join([chr(c) for c in row])
             lines.append(line)
         return "\n".join(lines)
 
     def find_intersections(self):
         intersections = []
-        for point in zip(*np.where(self.board == self.SCAFFOLD)):
+        for point in zip(*np.where(self.matrix == self.SCAFFOLD)):
             neighbours = self.neighbours_of(point, lambda val: val == self.SCAFFOLD)
             if len(neighbours) == 4:
                 intersections.append(point)
@@ -76,8 +58,8 @@ class BoardBuilder(object):
         for delta_x,delta_y in offsets:
             new_x = pos[0]+delta_x
             new_y = pos[1]+delta_y
-            if 0 <= new_x < self.board.shape[0] and 0 <= new_y < self.board.shape[1]:
-                val = self.board[new_x, new_y]
+            if 0 <= new_x < self.matrix.shape[0] and 0 <= new_y < self.matrix.shape[1]:
+                val = self.matrix[new_x, new_y]
                 if cond is not None and not cond(val):
                     continue
                 results.append((new_x, new_y, val))
@@ -99,6 +81,50 @@ class BoardBuilder(object):
 
         chunks = [s1,  s2,s2,s2,  s3]
         return ",".join(chunks).split(',')
+
+class BoardBuilder(object):
+
+    def __init__(self, tape=None):
+        self.inputs = []
+        if tape is not None:
+            self.computer = Interpreter(tape)
+            self.computer.set_uplink_to(self)
+        self.board = None
+        self.amount_of_dust = 0
+
+    def execute(self):
+        rows = []
+        row = []
+
+        while not self.computer.finished:
+            self.computer.execute()
+
+            while len(self.inputs) > 0:
+                code = self.inputs.pop(0)
+
+                if code > 127:
+                    # Here we catch the value that is not the image pixel but the amount
+                    # of dust the robot has collected, as per the instruction:
+                    # > Once the cleanong robot finishes the programmed set of movements
+                    # > it will return to its docking station and report the amount of space
+                    # > dust it collected as a large, non-ASCII value in a single output
+                    # > instruction.
+                    self.amount_of_dust = code
+                else:
+                    ch = chr(code)
+                    print(ch, end='', flush=True)
+
+                    if chr(code) == '\n':
+                        if len(row) > 0:
+                            rows.append(row)
+                        row = []
+                    else:
+                        row.append(code)
+
+        self.board = Board()
+        self.board.matrix = np.array(rows)
+
+        return self.board
 
 class CommandEncoder(object):
 
@@ -127,10 +153,10 @@ class CommandEncoder(object):
         if len(items) == 0:
             self.subsequences.append( (deepcopy(parts), deepcopy(part_ids)) )
             return True
-        
+
         level = len(part_ids)
         indent = " " * level
-    
+
         for l in range(1, 1+min(self.max_length, len(items))):
             head, tail = items[0:l], items[l:]
             # print(f"{indent}[{level}]HEAD: {','.join(head)}")
@@ -172,13 +198,13 @@ class CommandEncoder(object):
             tape.append(list(s+'\n'), ord)
             tapes.append(tape)
         return tapes
-        
+
     def _add_commas(self, elems):
         # DANGER: python coprophagy!
         elems_with_commas = list(itertools.chain.from_iterable(zip(elems, [',']*len(elems))))
         elems_with_commas.pop()
         return elems_with_commas
-    
+
 ################################################################################
 
 def run_tests_17_2():
@@ -192,7 +218,7 @@ def run_tests_17_2():
           "82,44,52,44,82,44,52,44,82,44,56,10",
           "76,44,54,44,76,44,50,10"]),
 
-        # TODO: dont know if this is correct...
+        # TODO: solved manually
         (bb.path,
          ['A,A,B,C,B,C,B,C,B,A', 'R,6,L,9,3,R,6', 'L,9,3,R,6,L,8,L,9,3', 'R,12,L,9,1,L,9,1'],
          ['65,44,65,44,66,44,67,44,66,44,67,44,66,44,67,44,66,44,65,10',
@@ -234,9 +260,9 @@ def run_day_17_1():
     expected = 13580
 
     bb = BoardBuilder(tape)
-    bb.execute()
+    board = bb.execute()
 
-    res = bb.total_alignment
+    res = board.total_alignment
     print(f"Answer: sum of all camera alignment parameters: {res}")
 
     if res == expected:
@@ -246,20 +272,27 @@ def run_day_17_1():
 
 def run_day_17_2():
     """
-    After visiting every part of the scaffold at least once, 
+    After visiting every part of the scaffold at least once,
     how much dust does the vacuum robot report it has collected?
     """
     print("=== Day 17, Task 2 ===")
 
     expected = 1063081
 
+    # first, we need to rerun the task 1 to get the board.
+    #tape = Tape.read_from_file("input.txt")
+    #bb = BoardBuilder(tape)
+    #board = bb.execute()
+    #path = board.path
+    # but we are lazy and therefore cutting short
+    path = Board().path
+
+    # now part 2
     tape = Tape.read_from_file("input.txt")
     tape.write_to(0,2)
 
-    bb = BoardBuilder(tape)
-
     enc = CommandEncoder(3, 10)
-    enc.execute(bb.path)
+    enc.execute(path)
 
     # TODO: movement instructions are given as a sequence of individual integers
     # (now available as Tape.cells). CommandEncoder can now be simplified.
@@ -272,12 +305,13 @@ def run_day_17_2():
     # provide continuous video feed?
     yes = [ord('y'), ord('\n')]
     no =  [ord('n'), ord('\n')]
-    commands.extend(not)
+    commands.extend(no)
 
+    bb = BoardBuilder(tape)
     bb.computer.inputs = commands
     bb.execute()
 
-    res = bb.computer.outputs.pop()
+    res = bb.amount_of_dust
     print(f"Answer: amount of dust the robot collected: {res}")
 
     if res == expected:
@@ -289,7 +323,7 @@ def run_tests_create_tape():
     tape = Tape()
     data = ["A", "B", "C", "B", "C", "A", "\n"]
     expected = "65,66,67,66,67,65,10"
-    
+
     for ch in data:
         tape.append(ch, ord)
 
