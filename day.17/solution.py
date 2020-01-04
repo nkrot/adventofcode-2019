@@ -128,8 +128,8 @@ class BoardBuilder(object):
 class CommandEncoder(object):
 
     def __init__(self, max_components=None, max_length=None):
-        self.max_components = max_components
-        self.max_length = max_length
+        self.max_components = max_components or 3
+        self.max_length = max_length or 10
         self.subsequences = []
         self.function_names = {0: 'A', 1: 'B', 2: 'C'}
 
@@ -138,9 +138,9 @@ class CommandEncoder(object):
             items = deepcopy(seq)
         else:
             items = seq.split(',')
-        self.decompose(items, [], [])
+        self._decompose(items, [], [])
 
-    def decompose(self, items, parts, part_ids):
+    def _decompose(self, items, parts, part_ids):
         """
         Given a sequence (a list <items>), find a number of subsequence from which
         the original sequence can be constructed such that
@@ -168,7 +168,7 @@ class CommandEncoder(object):
 
             if head in parts:
                 part_ids.append(parts.index(head))
-                self.decompose(tail, parts, part_ids)
+                self._decompose(tail, parts, part_ids)
                 part_ids.pop()
 
             if added:
@@ -290,7 +290,7 @@ def run_day_17_2():
     tape = Tape.read_from_file("input.txt")
     tape.write_to(0,2)
 
-    enc = CommandEncoder(3, 10)
+    enc = CommandEncoder()
     enc.execute(path)
 
     # TODO: movement instructions are given as a sequence of individual integers
