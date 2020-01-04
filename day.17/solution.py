@@ -6,7 +6,6 @@
 # 2. refactor CommandEncoder:
 #    * name things meaningfully
 #    * do not generate what is not required
-# 3. what does 'continuous video feed' does?
 # 4. implement computing the path (now hardcoded in BoardBuilder.path)
 
 import os
@@ -303,6 +302,8 @@ def run_day_17_2():
         commands.extend(list(t.cells))
 
     # provide continuous video feed?
+    # continous video feed will produce a full board after each robot movement
+    # This is very slow!
     yes = [ord('y'), ord('\n')]
     no =  [ord('n'), ord('\n')]
     commands.extend(no)
