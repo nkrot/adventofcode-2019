@@ -3,7 +3,7 @@ import sys
 
 class Tape(object):
     """
-    >>> prg = "1,0,0,3,99" 
+    >>> prg = "1,0,0,3,99"
     >>> tape = Tape(prg)
     >>> tape.cells == [1, 0, 0, 3, 99]
     True
@@ -75,18 +75,18 @@ class Tape(object):
         0
         """
         addr = self.position if addr is None else addr
-        
+
         if addr < 0:
             raise ValueError(f"Attempting to read tape at negative address: {addr}")
         elif addr >= len(self.cells):
             self._extend_tape_upto_address(addr)
-            
+
         return self.cells[addr]
 
     def read(self):
         """
         Read value at the current position and advance the head one step
-        
+
         TODO: reimplement it to advance the pointer and read the value
 
         >>> t = Tape("1,2,3")
@@ -115,19 +115,27 @@ class Tape(object):
         """
         if addr >= len(self.cells):
             self._extend_tape_upto_address(addr)
-        
+
         self.cells[addr] = value
 
     def _extend_tape_upto_address(self, addr):
         """
-        Extend the tape to accomodate given address <addr>.
+        Extend the tape to accommodate given address <addr>.
         New cells carry the value of 0.
         """
         padding_length = 1 + addr - len(self.cells)
         self.cells.extend([0]*padding_length)
 
     def __str__(self):
-        return ",".join([str(i) for i in self.cells])
+        return self.dumps()
+
+    def dumps(self, converter=None):
+        # if converter is not None:
+        #     # day 17p2: not sufficient
+        #     data = [str(converter(i)) for i in self.cells]
+        # else:
+        data = [str(i) for i in self.cells]
+        return ",".join(data)
 
     def append(self, data, converter=None):
         """
@@ -135,7 +143,7 @@ class Tape(object):
         Add to the tape new element(s).
         TODO: support adding negative values
         """
-        
+
         if isinstance(data, type([])):
             for d in data:
                 self.append(d, converter)
@@ -145,4 +153,3 @@ class Tape(object):
                 self.cells.append(_d)
             else:
                 raise ValueError(f"Can not add value of type {type(_d)} to the tape: {data}")
-
