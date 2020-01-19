@@ -76,6 +76,7 @@ class Board(object):
 
     @classmethod
     def from_lines(cls, lines):
+        lines = [l.strip() for l in lines]
         board = Board((len(lines), len(lines[0])))
         for idx,line in enumerate(lines):
             board.set_row(idx, line)
@@ -166,25 +167,49 @@ class RouteMap(object):
 
     def connect(self, start, end):
         edge = self.Edge(start, end)
-        print(f"adding edge from {edge}")
+        print(f"adding edge {edge}")
         self.edges.append(edge)
 
     def __str__(self):
         lines = [ str(edge) for edge in self.edges ]
         return "\n".join(lines)
 
+    def to_dot(self):
+        lines = ["digraph RouteMap {"]
+        for edge in self.edges:
+            lines.append(edge.to_dot())
+        lines.append("}")
+        return "\n".join(lines)
+
     class Edge(object):
         def __init__(self, start, end):
-            self.start = start
-            self.end = end
+            self.start  = start
+            self.end    = end
+            self.length = 0
 
         def __str__(self):
-            return f"{str(self.start)} -> {str(self.end)}"
+            return f"{str(self.start)} -> {str(self.end)} [length={self.length}]"
+
+        def to_dot(self):
+            lines = [
+                f"\"{self.start.name}\" [shape={self._shape(self.start)}];",
+                f"\"{self.end.name}\" [shape={self._shape(self.end)}];",
+                f"\"{self.start.name}\" -> \"{self.end.name}\" [label=\"{self.length}\"];"
+            ]
+            return "\n".join(lines)
+
+        def _shape(self, node):
+            shape = "circle"
+            if node.is_key():
+                shape = "diamond"
+            elif node.is_door():
+                shape = "box"
+            return shape
 
 class MazeWalker(object):
     def __init__(self):
         self.queue = []
-        self.verbose = not False
+        self.verbose = False
         self.route_map = RouteMap()
         self.keys = []
 
@@ -198,11 +223,17 @@ class MazeWalker(object):
     def can_unlock_door(self, d):
         return d.is_door() and any(k.unlocks(d) for k in self.keys)
 
-    def all_paths(self, board):
-        board = board.copy()
-        self._walk(board, self.route_map)
+    def build_route_map(self, board):
+        _board = board.copy()
+        self._walk(_board)
 
-    def _walk(self, board, route):
+        for idx,edge in enumerate(self.route_map.edges):
+            edge.start = board.at(edge.start)
+            edge.end   = board.at(edge.end)
+            edge.length = idx # for debugging
+
+    def _walk(self, board):
+        """Walk from entrance"""
         board.mark_as_open(board.entrance)
         ends = self._explore_maze(board)
         print(ends)
@@ -211,13 +242,15 @@ class MazeWalker(object):
             # print(repr(key_or_door))
 
             if key_or_door.is_key() or self.can_unlock_door(key_or_door):
+                self.route_map.connect(board.entrance, end)
+
                 newboard = board.copy()
                 newboard.entrance = end
 
                 walker = self.copy()
                 walker.add_key(key_or_door)
-                walker.route_map = route
-                walker.all_paths(newboard)
+                walker.route_map = self.route_map # reusing the same route_map!
+                walker._walk(newboard)
 
     # TODO: additionally count the distance from origin to every reached end
     def _explore_maze(self, board):
@@ -233,12 +266,11 @@ class MazeWalker(object):
                     continue
                 point = board.at(pos)
                 if point == board.EMPTY:
-                    #self.board.mark_as_passed(pos)
                     passed.append(pos)
                     queue.append(pos)
                 elif isinstance(point, Artifact):
                     stops.append(pos)
-                    self.route_map.connect(origin, pos)
+                    # self.route_map.connect(origin, pos) # this adds invalid segments ( @ -> A )
                 else:
                     raise ValueError(f"Oops. Dont know what to do with {point} at {pos}")
         if self.verbose:
@@ -292,7 +324,22 @@ def run_tests_18_1():
 
     walker = MazeWalker()
     walker.verbose = True
-    walker.all_paths(b)
+    walker.build_route_map(b)
+
+    route = walker.route_map
+    #print(route.to_dot())
+
+def run_day_18_1():
+    print("=== Day 18, Task 1 ===")
+
+    with open("input.txt") as fd:
+        lines = fd.readlines()
+
+    b = Board.from_lines(lines)
+    print(b)
+
+    walker = MazeWalker()
+    walker.build_route_map(b)
 
     print(walker.route_map)
 
