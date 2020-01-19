@@ -165,8 +165,8 @@ class RouteMap(object):
         self.origin = None
         self.edges = []
 
-    def connect(self, start, end):
-        edge = self.Edge(start, end)
+    def connect(self, start, end, length=0):
+        edge = self.Edge(start, end, length)
         print(f"adding edge {edge}")
         self.edges.append(edge)
 
@@ -182,10 +182,10 @@ class RouteMap(object):
         return "\n".join(lines)
 
     class Edge(object):
-        def __init__(self, start, end):
+        def __init__(self, start, end, length=0):
             self.start  = start
             self.end    = end
-            self.length = 0
+            self.length = length
 
         def __str__(self):
             return f"{str(self.start)} -> {str(self.end)} [length={self.length}]"
@@ -228,21 +228,19 @@ class MazeWalker(object):
         self._walk(_board)
 
         for idx,edge in enumerate(self.route_map.edges):
-            edge.start = board.at(edge.start)
-            edge.end   = board.at(edge.end)
-            edge.length = idx # for debugging
+            edge.start  = board.at(edge.start)
+            edge.end    = board.at(edge.end)
 
     def _walk(self, board):
-        """Walk from entrance"""
         board.mark_as_open(board.entrance)
         ends = self._explore_maze(board)
         print(ends)
-        for end in ends:
+        for end,dist in ends:
             key_or_door = board.at(end)
             # print(repr(key_or_door))
 
             if key_or_door.is_key() or self.can_unlock_door(key_or_door):
-                self.route_map.connect(board.entrance, end)
+                self.route_map.connect(board.entrance, end, dist)
 
                 newboard = board.copy()
                 newboard.entrance = end
@@ -254,22 +252,24 @@ class MazeWalker(object):
 
     # TODO: additionally count the distance from origin to every reached end
     def _explore_maze(self, board):
+        """Find doors and keys reachable from the entrance"""
         origin = board.entrance
         if self.verbose:
             print(f"--- walk from {origin} ---")
-        queue, passed = [origin], [origin]
+        queue, passed = [(origin, 0)], [origin]
         stops = []
         while len(queue):
-            _origin = queue.pop(0)
+            _origin, _dist = queue.pop(0)
             for pos in board.open_neighbours_of(_origin):
                 if pos in passed:
                     continue
                 point = board.at(pos)
+                dist = 1 + _dist
                 if point == board.EMPTY:
                     passed.append(pos)
-                    queue.append(pos)
+                    queue.append((pos, dist))
                 elif isinstance(point, Artifact):
-                    stops.append(pos)
+                    stops.append((pos, dist))
                     # self.route_map.connect(origin, pos) # this adds invalid segments ( @ -> A )
                 else:
                     raise ValueError(f"Oops. Dont know what to do with {point} at {pos}")
@@ -327,7 +327,7 @@ def run_tests_18_1():
     walker.build_route_map(b)
 
     route = walker.route_map
-    #print(route.to_dot())
+    print(route.to_dot())
 
 def run_day_18_1():
     print("=== Day 18, Task 1 ===")
