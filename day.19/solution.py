@@ -17,19 +17,60 @@ class Scanner(object):
         self.verbose = False
 
     def execute(self, board):
-        print(f'scanning the board of (height,width)={board.shape}')
+        self.board = board
+        print(f'scanning the board of (height,width)={self.board.shape}')
 
         readings = []
 
-        for y,x in board.positions():
+        for y,x in self.positions():
             self._vprint(f"Position: {(x,y)}")
             tape = Tape(self.tape)
             tape.rewind() # TODO: necessary?
 
             computer = Interpreter(tape, inputs=[x,y], outputs=readings)
             computer.execute()
-            board.mark_as((y,x), readings.pop(0))
-            self._vprint(str(board))
+            state = readings.pop(0)
+            if state == 0:
+                state = 2
+            self.board.mark_as((y,x), state)
+            self._vprint(str(self.board))
+
+    def positions(self):
+        """
+        positions on the board to check
+        """
+        beam = []
+        tip = (-1, -1) # tip of the beam
+        while tip[0] < self.board.shape[0]-1:
+            del beam[:]
+            x, y = tip[0]+1, tip[1]+1
+
+            # check row (to the west)
+            for e in range(1, y+1):
+                pos = x, y-e
+                yield pos
+                if self.board.at(pos) == 1:
+                    beam.append(pos)
+                else:
+                    # NOTE: this may be too early
+                    break
+
+            # check row (to the east)
+            for e in range(y+1):
+                pos = x, y+e
+                yield pos
+                if self.board.at(pos) == 1:
+                    beam.append(pos)
+                else:
+                    # NOTE: this may be too early
+                    break
+
+            # decide what will be new tip of the beam
+            # print(beam)
+            if len(beam) == 0:
+                tip = (tip[0]+1, tip[1]+1)
+            else:
+                tip = max(beam)
 
     def _vprint(self, msg):
         if self.verbose:
@@ -38,8 +79,9 @@ class Scanner(object):
 class Board(object):
 
     FIGURES = {
-        0: '.', # drone is stationary
-        1: '#'  # drone is pulled
+        0: '.',  # drone is stationary
+        1: '#',  # drone is pulled
+        2: '-',  # checked
     }
 
     def __init__(self, shape):
@@ -48,18 +90,12 @@ class Board(object):
         """
         self.matrix = np.zeros(shape, dtype=np.int8)
 
+    def at(self, pos):
+        return self.matrix[pos]
+
     @property
     def shape(self):
         return self.matrix.shape
-
-    def positions(self):
-        """
-        Iterate over all cells on the board
-        """
-        height, width = self.matrix.shape
-        for x in range(height):
-            for y in range(width):
-                yield (x,y)
 
     def mark_as(self, pos, val):
         self.matrix[pos] = val
@@ -80,7 +116,7 @@ class Board(object):
         return self.visualize()
 
     def count_points_under_beam(self):
-        return self.matrix.sum()
+        return self.matrix[self.matrix == 1].sum()
 
 ################################################################################
 
